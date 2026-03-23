@@ -1,0 +1,37 @@
+# YOLO inference on live video for target detection
+
+# Core YOLO framework (Ultralytics - supports YOLOv8/v9/v10/v11)
+ultralytics>=8.3.0
+
+# Deep learning backend
+torch>=2.1.0
+torchvision>=0.16.0
+
+# Computer vision & video capture
+opencv-python>=4.9.0
+
+# Numerical computing
+numpy>=1.24.0
+
+# Image processing
+Pillow>=10.0.0
+
+# Progress bars & utilities
+tqdm>=4.66.0
+
+# YAML config support (used by ultralytics)
+PyYAML>=6.0.1
+
+# Plotting / visualization (optional but used by ultralytics for results)
+matplotlib>=3.7.0
+
+# Pandas for results handling
+pandas>=2.0.0
+
+# SciPy for NMS and other math ops
+scipy>=1.11.0
+
+# REST service
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.0.0
