@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Tuple, Union
 
 
 @dataclass
@@ -19,8 +19,8 @@ class DetectorConfig:
     # Input resolution fed to the model (None = model default)
     imgsz: Union[int,Tuple[int,int]] = (720,1280)
 
-    # Video source
-    source: int | str = "rtsp://10.0.0.100:8554/live"               # 0 = default webcam, or a video file path / RTSP URL
+    # Video sources
+    source: List[str] = field(default_factory=lambda: ["rtsp://10.0.0.100:8554/live"])
 
     # Display
     show: bool = True                   # Show live annotated frames
@@ -30,4 +30,35 @@ class DetectorConfig:
     output_path: Optional[str] = None
     fps: int = 30
 
-    
+    def set_model_path(self, value: str) -> None:
+        self.model_path = value
+
+    def set_device(self, value: str) -> None:
+        self.device = value
+
+    def set_confidence(self, value: float) -> None:
+        self.confidence = float(value)
+
+    def set_iou_threshold(self, value: float) -> None:
+        self.iou_threshold = float(value)
+
+    def set_target_classes(self, value: List[int]) -> None:
+        self.target_classes = value
+
+    def set_imgsz(self, value: Union[int, Tuple[int, int]]) -> None:
+        self.imgsz = value
+
+    def set_source(self, value: List[str]) -> None:
+        self.source = value
+
+    def set_show(self, value: bool) -> None:
+        self.show = value
+
+    def set_window_name(self, value: str) -> None:
+        self.window_name = value
+
+    def set_output_path(self, value: Optional[str]) -> None:
+        self.output_path = value
+
+    def set_fps(self, value: int) -> None:
+        self.fps = int(value)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 import cv2
@@ -13,7 +14,7 @@ class YOLODetector:
     Wraps an Ultralytics YOLO model for real-time target detection on live video.
 
     Usage:
-        config = DetectorConfig(model_path="yolov8n.pt", source=0, confidence=0.5)
+        config = DetectorConfig(model_path="yolov10n.pt", source=["rtsp://...", "rtsp://..."])
         detector = YOLODetector(config)
         detector.run()
     """
@@ -22,22 +23,25 @@ class YOLODetector:
         self.cfg = config
         self.model = YOLO(config.model_path)
         self.model.to(config.device)
-        self._writer: cv2.VideoWriter | None = None
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def run(self) -> None:
-        """Open the video source and run detection until the user presses 'q'."""
-        cap = self._open_capture()
-        try:
-            self._loop(cap)
-        finally:
-            cap.release()
-            if self._writer:
-                self._writer.release()
-            cv2.destroyAllWindows()
+        """Open all video sources and run detection until the user presses 'q'.
+
+        Each feed runs in its own thread with a dedicated window named
+        ``<window_name>-<index>``.
+        """
+        threads = [
+            threading.Thread(target=self._run_single, args=(src, i), daemon=True)
+            for i, src in enumerate(self.cfg.source)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
 
     def predict_frame(self, frame):
         """
@@ -59,47 +63,98 @@ class YOLODetector:
         annotated = results[0].plot()
         return results[0], annotated
 
-    def predict_video(self, source: int | str) -> list[dict[str, Any]]:
+    def predict_video(self, sources: list[str]) -> dict[str, list[dict[str, Any]]]:
         """
-        Run YOLOv10 inference on every frame of a video source.
+        Run YOLOv10 inference on every frame of each video source in parallel.
 
         Args:
-            source: Video file path, RTSP/HTTP URL, or webcam index.
+            sources: List of video file paths or RTSP/HTTP URLs.
 
         Returns:
-            List of per-frame dicts::
+            Dict mapping each source string to its list of per-frame dicts::
 
-                [
-                    {
-                        "frame_index": 0,
-                        "detections": [
-                            {
-                                "class_id": int,
-                                "class_name": str,
-                                "confidence": float,
-                                "bbox": [x1, y1, x2, y2],   # absolute pixel coords
-                            },
-                            ...
-                        ],
-                    },
+                {
+                    "rtsp://...": [
+                        {
+                            "frame_index": 0,
+                            "detections": [
+                                {
+                                    "class_id": int,
+                                    "class_name": str,
+                                    "confidence": float,
+                                    "bbox": [x1, y1, x2, y2],
+                                },
+                                ...
+                            ],
+                        },
+                        ...
+                    ],
                     ...
-                ]
+                }
         """
+        results: dict[str, list[dict[str, Any]]] = {}
+        lock = threading.Lock()
+
+        def _worker(src: str) -> None:
+            frames = self._infer_source(src)
+            with lock:
+                results[src] = frames
+
+        threads = [threading.Thread(target=_worker, args=(src,)) for src in sources]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        return results
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _run_single(self, source: str, index: int) -> None:
+        """Run detection loop for one video source."""
         cap = cv2.VideoCapture(source)
         if not cap.isOpened():
             raise RuntimeError(f"Cannot open video source: {source!r}")
-
-        frames: list[dict[str, Any]] = []
-        frame_index = 0
-
+        window_name = f"{self.cfg.window_name}-{index}"
+        writer: cv2.VideoWriter | None = None
         try:
             while True:
                 ok, frame = cap.read()
                 if not ok:
                     break
 
-                results, _ = self.predict_frame(frame)
+                _, annotated = self.predict_frame(frame)
 
+                if self.cfg.output_path:
+                    if writer is None:
+                        writer = self._init_writer(annotated)
+                    writer.write(annotated)
+
+                if self.cfg.show:
+                    cv2.imshow(window_name, annotated)
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
+                        break
+        finally:
+            cap.release()
+            if writer:
+                writer.release()
+            cv2.destroyWindow(window_name)
+
+    def _infer_source(self, source: str) -> list[dict[str, Any]]:
+        """Run inference on every frame of a single video source."""
+        cap = cv2.VideoCapture(source)
+        if not cap.isOpened():
+            raise RuntimeError(f"Cannot open video source: {source!r}")
+
+        frames: list[dict[str, Any]] = []
+        frame_index = 0
+        try:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                results, _ = self.predict_frame(frame)
                 detections = [
                     {
                         "class_id": int(box.cls[0]),
@@ -109,44 +164,13 @@ class YOLODetector:
                     }
                     for box in results.boxes
                 ]
-
                 frames.append({"frame_index": frame_index, "detections": detections})
                 frame_index += 1
         finally:
             cap.release()
-
         return frames
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _open_capture(self) -> cv2.VideoCapture:
-        cap = cv2.VideoCapture(self.cfg.source)
-        if not cap.isOpened():
-            raise RuntimeError(f"Cannot open video source: {self.cfg.source!r}")
-        return cap
 
     def _init_writer(self, frame) -> cv2.VideoWriter:
         h, w = frame.shape[:2]
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         return cv2.VideoWriter(self.cfg.output_path, fourcc, self.cfg.fps, (w, h))
-
-    def _loop(self, cap: cv2.VideoCapture) -> None:
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                break
-
-            _, annotated = self.predict_frame(frame)
-
-            if self.cfg.output_path:
-                if self._writer is None:
-                    self._writer = self._init_writer(annotated)
-                self._writer.write(annotated)
-
-            if self.cfg.show:
-                cv2.imshow(self.cfg.window_name, annotated)
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break
-
