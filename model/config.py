@@ -1,11 +1,13 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Union
+import os
 
 
 @dataclass
 class DetectorConfig:
     # Model — YOLOv10 weights (NMS-free end-to-end detection)
-    model_path: str = "yolov10n.pt"      # yolov10n/s/m/b/l/x.pt
+    _BASE_PATH = os.path.abspath(__file__)
+    model_path: str = os.path.join(os.path.dirname(_BASE_PATH), "..", "train14_ncnn_model_Fast")
     device: str = "cuda"                   # "cpu", "cuda", "cuda:0", "mps"
 
     # Inference thresholds
