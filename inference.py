@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import threading
 from typing import Any
 
@@ -111,44 +112,53 @@ class YOLODetector:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _open_capture(self, source: str, retry_interval: float = 5.0) -> cv2.VideoCapture:
+        """Open a VideoCapture, retrying indefinitely until the source becomes available."""
+        while True:
+            cap = cv2.VideoCapture(source)
+            if cap.isOpened():
+                return cap
+            cap.release()
+            print(f"[CVEngine] Waiting for source {source!r}, retrying in {retry_interval}s...")
+            time.sleep(retry_interval)
+
     def _run_single(self, source: str, index: int) -> None:
-        """Run detection loop for one video source."""
-        cap = cv2.VideoCapture(source)
-        if not cap.isOpened():
-            raise RuntimeError(f"Cannot open video source: {source!r}")
-        window_name = f"{self.cfg.window_name}-{index}"
+        """Run detection loop for one video source, reconnecting if the stream drops."""
+        window_name = f"{self.cfg.window_name}-{source}"
         writer: cv2.VideoWriter | None = None
         try:
             while True:
-                ok, frame = cap.read()
-                if not ok:
-                    break
+                cap = self._open_capture(source)
+                try:
+                    while True:
+                        ok, frame = cap.read()
+                        if not ok:
+                            print(f"[CVEngine] Lost feed from {source!r}, reconnecting...")
+                            break
 
-                _, annotated = self.predict_frame(frame)
+                        _, annotated = self.predict_frame(frame)
 
-                if self.cfg.output_path:
-                    if writer is None:
-                        writer = self._init_writer(annotated)
-                    writer.write(annotated)
+                        if self.cfg.output_path:
+                            if writer is None:
+                                writer = self._init_writer(annotated)
+                            writer.write(annotated)
 
-                if self.cfg.show:
-                    cv2.imshow(window_name, annotated)
-                    if cv2.waitKey(1) & 0xFF == ord("q"):
-                        break
+                        if self.cfg.show:
+                            cv2.imshow(window_name, annotated)
+                            if cv2.waitKey(1) & 0xFF == ord("q"):
+                                return
+                finally:
+                    cap.release()
         finally:
-            cap.release()
             if writer:
                 writer.release()
             cv2.destroyWindow(window_name)
 
     def _infer_source(self, source: str) -> list[dict[str, Any]]:
         """Run inference on every frame of a single video source."""
-        cap = cv2.VideoCapture(source)
-        if not cap.isOpened():
-            raise RuntimeError(f"Cannot open video source: {source!r}")
-
         frames: list[dict[str, Any]] = []
         frame_index = 0
+        cap = self._open_capture(source)
         try:
             while True:
                 ok, frame = cap.read()

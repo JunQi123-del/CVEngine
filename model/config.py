@@ -17,7 +17,7 @@ class DetectorConfig:
     target_classes: List[int] = field(default_factory=list)
 
     # Input resolution fed to the model (None = model default)
-    imgsz: Union[int,Tuple[int,int]] = (720,1280)
+    imgsz: Union[int,Tuple[int,int]] = (1280,720)
 
     # Video sources
     source: List[str] = field(default_factory=lambda: ["rtsp://10.0.0.100:8554/live"])
