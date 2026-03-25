@@ -7,7 +7,7 @@ import os
 class DetectorConfig:
     # Model — YOLOv10 weights (NMS-free end-to-end detection)
     _BASE_PATH = os.path.abspath(__file__)
-    model_path: str = os.path.join(os.path.dirname(_BASE_PATH), "..", "train14_ncnn_model_Fast")
+    model_path: str = os.path.join(os.path.dirname(_BASE_PATH),"train14_ncnn_model_FAST")
     device: str = "cuda"                   # "cpu", "cuda", "cuda:0", "mps"
 
     # Inference thresholds
