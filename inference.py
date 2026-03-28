@@ -64,7 +64,7 @@ class YOLODetector:
         annotated = results[0].plot()
         return results[0], annotated
 
-    def predict_video(self, sources: list[str]) -> dict[str, list[dict[str, Any]]]:
+    def _predict_video(self, sources: list[str]) -> dict[str, list[dict[str, Any]]]:
         """
         Run YOLOv10 inference on every frame of each video source in parallel.
 
@@ -136,7 +136,7 @@ class YOLODetector:
                             print(f"[CVEngine] Lost feed from {source!r}, reconnecting...")
                             break
 
-                        _, annotated = self.predict_frame(frame)
+                        _, annotated = self._predict_frame(frame)
 
                         if self.cfg.output_path:
                             if writer is None:
