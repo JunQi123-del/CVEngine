@@ -159,7 +159,7 @@ class YOLODetector:
                             print(f"[CVEngine] Lost feed from {source!r}, reconnecting...")
                             break
 
-                        _, annotated = self.predict_frame(frame)
+                        _, annotated = self._predict_frame(frame)
 
                         if self.cfg.output_path:
                             if writer is None:
