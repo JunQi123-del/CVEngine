@@ -22,7 +22,7 @@ class DetectorConfig:
     imgsz: Union[int,Tuple[int,int]] = (1280,720)
 
     # Video sources
-    source: List[str] = field(default_factory=lambda: ["rtsp://10.0.0.100:8554/live"])
+    source: List[str] = field(default_factory=lambda: ["rtsp://10.0.0.100:8554/live","rtsp://10.0.0.100:8554/live1","rtsp://10.0.0.100:8554/live2","rtsp://10.0.0.100:8554/live3"])
 
     # Display
     show: bool = True                   # Show live annotated frames
