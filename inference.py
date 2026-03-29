@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import queue
 import time
 import threading
 from typing import Any
@@ -34,17 +35,38 @@ class YOLODetector:
     def run(self) -> None:
         """Open all video sources and run detection until the user presses 'q'.
 
-        Each feed runs in its own thread with a dedicated window named
-        ``<window_name>-<index>``.
+        Inference runs in per-source threads; display is handled on the main
+        thread to satisfy OpenCV's GUI thread requirement.
         """
+        stop = threading.Event()
+        queues: dict[str, queue.Queue] = {src: queue.Queue(maxsize=2) for src in self.cfg.source}
+
         threads = [
-            threading.Thread(target=self._run_single, args=(src, i), daemon=True)
-            for i, src in enumerate(self.cfg.source)
+            threading.Thread(target=self._infer_loop, args=(src, queues[src], stop), daemon=True)
+            for src in self.cfg.source
         ]
         for t in threads:
             t.start()
-        for t in threads:
-            t.join()
+
+        try:
+            while not stop.is_set():
+                for src, q in queues.items():
+                    try:
+                        annotated = q.get_nowait()
+                    except queue.Empty:
+                        continue
+                    window_name = f"{self.cfg.window_name}-{src}"
+                    if self.cfg.show:
+                        cv2.imshow(window_name, annotated)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    stop.set()
+                    break
+        finally:
+            stop.set()
+            for t in threads:
+                t.join()
+            if self.cfg.show:
+                cv2.destroyAllWindows()
 
     def _predict_frame(self, frame):
         """
@@ -124,31 +146,30 @@ class YOLODetector:
             print(f"[CVEngine] Waiting for source {source!r}, retrying in {retry_interval}s...")
             time.sleep(retry_interval)
 
-    def _run_single(self, source: str, index: int) -> None:
-        """Run detection loop for one video source, reconnecting if the stream drops."""
-        window_name = f"{self.cfg.window_name}-{source}"
+    def _infer_loop(self, source: str, q: queue.Queue, stop: threading.Event) -> None:
+        """Inference thread: capture + detect, push annotated frames into q."""
         writer: cv2.VideoWriter | None = None
         try:
-            while True:
+            while not stop.is_set():
                 cap = self._open_capture(source)
                 try:
-                    while True:
+                    while not stop.is_set():
                         ok, frame = cap.read()
                         if not ok:
                             print(f"[CVEngine] Lost feed from {source!r}, reconnecting...")
                             break
 
-                        _, annotated = self._predict_frame(frame)
+                        _, annotated = self.predict_frame(frame)
 
                         if self.cfg.output_path:
                             if writer is None:
                                 writer = self._init_writer(annotated)
                             writer.write(annotated)
 
-                        if self.cfg.show:
-                            cv2.imshow(window_name, annotated)
-                            if cv2.waitKey(1) & 0xFF == ord("q"):
-                                return
+                        try:
+                            q.put_nowait(annotated)
+                        except queue.Full:
+                            pass
                 finally:
                     cap.release()
         finally:
