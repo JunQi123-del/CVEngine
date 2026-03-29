@@ -25,6 +25,8 @@ class YOLODetector:
         self.model = YOLO(config.model_path)
         self.model.to(config.device)
 
+        self.run()
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -44,7 +46,7 @@ class YOLODetector:
         for t in threads:
             t.join()
 
-    def predict_frame(self, frame):
+    def _predict_frame(self, frame):
         """
         Run inference on a single BGR numpy frame.
 
@@ -152,8 +154,8 @@ class YOLODetector:
         finally:
             if writer:
                 writer.release()
-            if self.cfg.show:
-                cv2.destroyWindow(window_name)
+            # if self.cfg.show:
+            #     cv2.destroyWindow(window_name)
 
     def _infer_source(self, source: str) -> list[dict[str, Any]]:
         """Run inference on every frame of a single video source."""
