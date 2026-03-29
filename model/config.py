@@ -8,7 +8,7 @@ class DetectorConfig:
     # Model — YOLOv10 weights (NMS-free end-to-end detection)
     _BASE_PATH = os.path.abspath(__file__)
     model_path: str = os.path.join(os.path.dirname(_BASE_PATH),"train14")
-    device: str = "cuda"                   # "cpu", "cuda", "cuda:0", "mps"
+    device: str = "cpu"                   # "cpu", "cuda", "cuda:0", "mps"
 
     # Inference thresholds
     confidence: float = 0.5              # Minimum confidence to keep a detection
